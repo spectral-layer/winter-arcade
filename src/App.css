@@ -1,0 +1,21 @@
+/* RIMOSSI gli stili demo Vite (logo, read-the-docs, #root max-width, ecc.) */
+/* Qui lasciamo solo classi reali dell'app */
+
+.backBtn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(0,0,0,.35);
+  color:#fff;
+  text-decoration:none;
+  font-weight:700;
+  letter-spacing:.2px;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+}
+.backBtn:hover{
+  background:rgba(0,0,0,.50);
+  border-color:rgba(255,255,255,.28);
+}

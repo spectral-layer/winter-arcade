@@ -1,0 +1,255 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: rgba(255, 255, 255, 0.92);
+  background-color: #0b0f16;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+
+  /* IMPORTANT: niente flex/center qui */
+  display: block;
+  background: #0b0f16;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+/* ===== Winter Arcade cover layout (FIX “pagina duplicata”) ===== */
+
+.homeCover {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* background blur (DEVE stare dietro) */
+.heroBg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.65);
+  transform: scale(1.05);
+  z-index: 0;
+}
+
+.homeCoverOverlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+      900px 500px at 20% 10%,
+      rgba(255, 255, 255, 0.12),
+      transparent 60%
+    ),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.55));
+  z-index: 1;
+}
+
+/* foreground image (NO-CROP, ma non deve “occupare” due volte la pagina) */
+.heroImg {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: min(980px, 92vw);
+  height: auto;
+  margin: 48px auto 0; /* 48px per lasciare aria sotto la topbar */
+}
+
+/* panel in basso a sinistra */
+.homeCoverPanel {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 3;
+
+  width: min(520px, calc(100% - 36px));
+  padding: 16px 16px;
+
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.heroTitle {
+  margin: 0;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  font-size: 18px;
+}
+
+.heroSubtitle {
+  margin: 6px 0 12px;
+  opacity: 0.85;
+  font-size: 13px;
+}
+
+.heroCtaRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.95);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.btn.ctaStrong {
+  background: rgba(99, 102, 241, 0.35); /* indigo-ish */
+  border-color: rgba(99, 102, 241, 0.45);
+}
+
+.btn.ctaStrong:hover {
+  background: rgba(99, 102, 241, 0.45);
+}
+
+.heroHintStrong {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.wallet-adapter-modal-container {
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+
+.wallet-adapter-modal {
+  max-width: 420px !important;
+  width: 100% !important;
+}
+.walletToggleBtn{
+  appearance:none;
+  border:1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.35);
+  color:#fff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.walletToggleBtn:hover{
+  background: rgba(0,0,0,.5);
+}
+
+.walletToggleBtn:disabled{
+  opacity:.65;
+  cursor: not-allowed;
+}
+
+.wallet-adapter-modal {
+  max-width: 420px;
+  width: calc(100% - 32px);
+  margin: 0 auto !important;
+}
+
+.wallet-adapter-modal{
+  margin: 0 !important;
+  width: min(420px, 92vw) !important;
+  max-height: calc(100vh - 36px) !important;
+}
+
+.wallet-adapter-modal-container{
+  max-height: 100% !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+/* --- Wallet Adapter Modal: always centered and on-screen --- */
+.wallet-adapter-modal-wrapper{
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 18px !important;
+  z-index: 2147483647 !important;
+}
+
+.wallet-adapter-modal{
+  margin: 0 !important;
+  width: min(420px, 92vw) !important;
+  max-height: calc(100vh - 36px) !important;
+}
+
+.wallet-adapter-modal-container{
+  max-height: 100% !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+.wallet-adapter-modal-wrapper,
+.wallet-adapter-modal-container,
+.wallet-adapter-modal {
+  transform: none !important;
+  top: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+}
+/* === HARD FIX: Solana Wallet Modal === */
+body > .wallet-adapter-modal-wrapper,
+#root > .wallet-adapter-modal-wrapper {
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+.wallet-adapter-modal {
+  margin: 0 !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  width: min(420px, 92vw) !important;
+  max-height: calc(100vh - 32px) !important;
+}
