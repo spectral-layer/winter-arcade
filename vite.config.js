@@ -4,7 +4,7 @@ import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
 
-// 👉 metti qui il nome ESATTO del repo GitHub
+// 👉 nome repo GitHub (corretto)
 const REPO_NAME = "winter-arcade";
 
 export default defineConfig(({ mode }) => ({
@@ -23,5 +23,11 @@ export default defineConfig(({ mode }) => ({
   },
   optimizeDeps: {
     include: ["buffer", "process", "stream-browserify", "util"],
+  },
+
+  // ✅ GH Pages via /docs
+  build: {
+    outDir: "docs",
+    emptyOutDir: true,
   },
 }));
