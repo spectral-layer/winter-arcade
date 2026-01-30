@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+// src/pages/Snowball.jsx
+import { useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "../components/BackButton.jsx";
-import { submitScore } from "../lib/scoreApi";
+import { submitScore as submitScoreApi } from "../lib/scoreApi";
 import { useWallet } from "@solana/wallet-adapter-react";
 
 export default function Snowball() {
@@ -11,24 +12,66 @@ export default function Snowball() {
 
   const wallet = useMemo(() => (publicKey ? publicKey.toBase58() : ""), [publicKey]);
 
-  // Test manuale finché il gioco non invia lo score via postMessage
-  const [score, setScore] = useState(0);
+  // Manual test submit
+  const [testScore, setTestScore] = useState(0);
   const [status, setStatus] = useState({ loading: false, msg: "" });
 
-  // (Opzionale) ricezione score dal gioco via postMessage
+  // Auto submit
+  const [autoStatus, setAutoStatus] = useState("");
+  const lastSubmittedRef = useRef(null);
+
   useEffect(() => {
     function onMessage(e) {
-      if (!e?.data) return;
-      if (e.data.type === "WINTER_ARCADE_SCORE" && e.data.game === GAME_KEY) {
-        const s = Number(e.data.score || 0);
-        if (!Number.isFinite(s) || s < 0) return;
-        setScore(s);
-        setStatus({ loading: false, msg: `Received score: ${s}` });
+      // DEBUG (puoi commentare dopo)
+      // console.log("POSTMESSAGE RECEIVED:", e.origin, e.data);
+
+      const isDev =
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+      if (e.origin !== window.location.origin && !(isDev && e.origin === "null")) return;
+
+      if (!e.data || typeof e.data !== "object") return;
+
+      const { type, game, score } = e.data;
+      if (type !== "WINTER_ARCADE_SCORE") return;
+      if (game !== GAME_KEY) return;
+
+      const s = Number(score);
+      if (!Number.isFinite(s) || s < 0) return;
+
+      if (!connected || !wallet) {
+        setAutoStatus("Score received, but wallet not connected.");
+        return;
       }
+
+      const sig = `${wallet}:${GAME_KEY}:${s}`;
+      if (lastSubmittedRef.current === sig) return;
+      lastSubmittedRef.current = sig;
+
+      (async () => {
+        try {
+          setAutoStatus(`Auto-submitting score: ${s}...`);
+          const res = await submitScoreApi({ wallet, game: GAME_KEY, score: s });
+
+          if (res?.ok) {
+            setAutoStatus(
+              res.accepted
+                ? `Auto: accepted ✅ (new best: ${res.current_best})`
+                : `Auto: not improved (best: ${res.current_best})`
+            );
+          } else {
+            setAutoStatus("Auto: submit failed.");
+          }
+        } catch (err) {
+          console.error("Auto submit error:", err);
+          setAutoStatus("Auto: submit failed (see console).");
+        }
+      })();
     }
+
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [connected, wallet]);
 
   const onSubmitTestScore = async () => {
     try {
@@ -39,24 +82,25 @@ export default function Snowball() {
         return;
       }
 
-      const scoreInt = Number.parseInt(String(score), 10);
+      const scoreInt = Number.parseInt(String(testScore), 10);
       if (!Number.isFinite(scoreInt) || scoreInt < 0) {
         setStatus({ loading: false, msg: "Invalid score." });
         return;
       }
 
-      const res = await submitScore({
+      const res = await submitScoreApi({
         wallet,
         game: GAME_KEY,
         score: scoreInt,
       });
 
       if (res?.ok) {
-        if (res.accepted) {
-          setStatus({ loading: false, msg: `Score accepted ✅ (new best: ${res.current_best})` });
-        } else {
-          setStatus({ loading: false, msg: `Not improved (current best: ${res.current_best})` });
-        }
+        setStatus({
+          loading: false,
+          msg: res.accepted
+            ? `Score accepted ✅ (new best: ${res.current_best})`
+            : `Not improved (current best: ${res.current_best})`,
+        });
       } else {
         setStatus({ loading: false, msg: "Submit failed." });
       }
@@ -98,18 +142,21 @@ export default function Snowball() {
               title="Snowball Frenzy Game"
               src={gameUrl}
               style={{ width: "100%", height: 520, border: "0", display: "block" }}
-              sandbox="allow-scripts allow-pointer-lock"
+              sandbox="allow-scripts allow-same-origin allow-pointer-lock"
               referrerPolicy="no-referrer"
             />
           </div>
 
+          {/* Manual test submit */}
           <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="p" style={{ margin: 0 }}>Test score:</span>
+              <span className="p" style={{ margin: 0 }}>
+                Test score:
+              </span>
               <input
                 type="number"
-                value={score}
-                onChange={(e) => setScore(e.target.value)}
+                value={testScore}
+                onChange={(e) => setTestScore(e.target.value)}
                 style={{
                   width: 140,
                   padding: "6px 8px",
@@ -131,6 +178,12 @@ export default function Snowball() {
 
             {status.msg ? <span className="p" style={{ margin: 0, opacity: 0.9 }}>{status.msg}</span> : null}
           </div>
+
+          {autoStatus ? (
+            <p className="p" style={{ marginTop: 10, opacity: 0.85 }}>
+              {autoStatus}
+            </p>
+          ) : null}
 
           <p className="p" style={{ marginTop: 10, opacity: 0.7 }}>
             Next step: the game will postMessage the score to the parent, and we auto-submit at game over.

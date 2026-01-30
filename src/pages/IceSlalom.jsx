@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+// src/pages/IceSlalom.jsx
+import { useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "../components/BackButton.jsx";
 import { submitScore } from "../lib/scoreApi";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -6,15 +7,75 @@ import { useWallet } from "@solana/wallet-adapter-react";
 export default function IceSlalom() {
   const { publicKey, connected } = useWallet();
 
-  // IMPORTANT: usa gli stessi game keys che stiamo salvando in Supabase.
-  // Nel DB avevamo usato "slalom" / "snowball". Manteniamo "slalom".
+  // IMPORTANT: usa gli stessi game keys salvati in Supabase
   const GAME_KEY = "slalom";
   const gameUrl = `${import.meta.env.BASE_URL}games/ice-slalom/index.html`;
+
   const wallet = useMemo(() => (publicKey ? publicKey.toBase58() : ""), [publicKey]);
 
-  // Solo per test manuale (finché il gioco non manda il punteggio automaticamente)
+  // Manual test submit (finché il gioco non invia automaticamente)
   const [testScore, setTestScore] = useState(0);
   const [status, setStatus] = useState({ loading: false, msg: "" });
+
+  // Auto submit status (da postMessage)
+  const [autoStatus, setAutoStatus] = useState("");
+  const lastSubmittedRef = useRef(null);
+
+  // ✅ Step 1C: listener robusto postMessage
+  useEffect(() => {
+    function onMessage(e) {
+      // DEBUG (puoi commentare dopo)
+      // console.log("POSTMESSAGE RECEIVED:", e.origin, e.data);
+
+      // Accetta solo stessa origin, tranne in DEV dove può essere "null"
+      const isDev =
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+      if (e.origin !== window.location.origin && !(isDev && e.origin === "null")) return;
+
+      if (!e.data || typeof e.data !== "object") return;
+
+      const { type, game, score } = e.data;
+      if (type !== "WINTER_ARCADE_SCORE") return;
+      if (game !== GAME_KEY) return;
+
+      const s = Number(score);
+      if (!Number.isFinite(s) || s < 0) return;
+
+      if (!connected || !wallet) {
+        setAutoStatus("Score received, but wallet not connected.");
+        return;
+      }
+
+      // evita doppio submit dello stesso punteggio
+      const sig = `${wallet}:${GAME_KEY}:${s}`;
+      if (lastSubmittedRef.current === sig) return;
+      lastSubmittedRef.current = sig;
+
+      (async () => {
+        try {
+          setAutoStatus(`Auto-submitting score: ${s}...`);
+          const res = await submitScore({ wallet, game: GAME_KEY, score: s });
+
+          if (res?.ok) {
+            setAutoStatus(
+              res.accepted
+                ? `Auto: accepted ✅ (new best: ${res.current_best})`
+                : `Auto: not improved (best: ${res.current_best})`
+            );
+          } else {
+            setAutoStatus("Auto: submit failed.");
+          }
+        } catch (err) {
+          console.error("Auto submit error:", err);
+          setAutoStatus("Auto: submit failed (see console).");
+        }
+      })();
+    }
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [connected, wallet]);
 
   const onSubmitTestScore = async () => {
     try {
@@ -38,11 +99,12 @@ export default function IceSlalom() {
       });
 
       if (res?.ok) {
-        if (res.accepted) {
-          setStatus({ loading: false, msg: `Score accepted ✅ (new best: ${res.current_best})` });
-        } else {
-          setStatus({ loading: false, msg: `Not improved (current best: ${res.current_best})` });
-        }
+        setStatus({
+          loading: false,
+          msg: res.accepted
+            ? `Score accepted ✅ (new best: ${res.current_best})`
+            : `Not improved (current best: ${res.current_best})`,
+        });
       } else {
         setStatus({ loading: false, msg: "Submit failed." });
       }
@@ -73,26 +135,41 @@ export default function IceSlalom() {
             Wallet: <b>{wallet || "—"}</b>
           </p>
 
-          {/* GAME EMBED (we'll add the real game in /public/games/ice-slalom/index.html) */}
-          <div style={{ marginTop: 12, borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)" }}>
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 14,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
             <iframe
-             title="Ice Slalom Game"
-             src={gameUrl}
-             style={{ width: "100%", height: 520, border: "0", display: "block" }}
-             sandbox="allow-scripts allow-pointer-lock"
-             referrerPolicy="no-referrer"
+              title="Ice Slalom Game"
+              src={gameUrl}
+              style={{ width: "100%", height: 520, border: "0", display: "block" }}
+              sandbox="allow-scripts allow-same-origin allow-pointer-lock"
+              referrerPolicy="no-referrer"
             />
           </div>
 
-          {/* TEMP: manual test submit until the game sends score automatically */}
+          {/* Manual test submit */}
           <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="p" style={{ margin: 0 }}>Test score:</span>
+              <span className="p" style={{ margin: 0 }}>
+                Test score:
+              </span>
               <input
                 type="number"
                 value={testScore}
                 onChange={(e) => setTestScore(e.target.value)}
-                style={{ width: 140, padding: "6px 8px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(0,0,0,0.25)", color: "white" }}
+                style={{
+                  width: 140,
+                  padding: "6px 8px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(0,0,0,0.25)",
+                  color: "white",
+                }}
               />
             </label>
 
@@ -104,10 +181,14 @@ export default function IceSlalom() {
               {status.loading ? "Submitting..." : "Submit score"}
             </button>
 
-            {status.msg ? (
-              <span className="p" style={{ margin: 0, opacity: 0.9 }}>{status.msg}</span>
-            ) : null}
+            {status.msg ? <span className="p" style={{ margin: 0, opacity: 0.9 }}>{status.msg}</span> : null}
           </div>
+
+          {autoStatus ? (
+            <p className="p" style={{ marginTop: 10, opacity: 0.85 }}>
+              {autoStatus}
+            </p>
+          ) : null}
 
           <p className="p" style={{ marginTop: 10, opacity: 0.7 }}>
             Next step: the game will postMessage the score to the parent, and we auto-submit at game over.
