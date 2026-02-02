@@ -1,6 +1,19 @@
+// src/pages/Winner.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import BackButton from "../components/BackButton.jsx";
+import { shortWallet } from "../lib/walletUi";
+
+function supabaseHeaders() {
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // NOTA: anon key è “pubblica” per definizione (sta nel client).
+  // Serve per chiamare Edge Functions quando JWT verification è ON.
+  return {
+    apikey: anon,
+    authorization: `Bearer ${anon}`,
+    "x-supabase-client-platform": "winter-arcade-web",
+  };
+}
 
 export default function Winner() {
   const [loading, setLoading] = useState(true);
@@ -13,11 +26,6 @@ export default function Winner() {
 
   const liveUrl = useMemo(() => `${baseUrl}/functions/v1/wall-of-fame`, [baseUrl]);
 
-  const finalUrl = useMemo(
-    () => `${baseUrl}/functions/v1/final-results`,
-    [baseUrl]
-  );
-
   useEffect(() => {
     let mounted = true;
 
@@ -26,8 +34,11 @@ export default function Winner() {
         setLoading(true);
         setErr("");
 
-        // Always use wall-of-fame for Winner page
-        const res = await fetch(liveUrl, { method: "GET" });
+        const res = await fetch(liveUrl, {
+          method: "GET",
+          headers: supabaseHeaders(),
+        });
+
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
@@ -36,10 +47,8 @@ export default function Winner() {
 
         if (!mounted) return;
 
-        // Real data (production clean)
-setFrozen(!!data?.frozen);
-setWinner(data?.winner ?? null);
-
+        setFrozen(Boolean(data?.frozen));
+        setWinner(data?.winner ?? null);
       } catch (e) {
         if (!mounted) return;
         setErr(e?.message || "Winner loading error");
@@ -54,6 +63,8 @@ setWinner(data?.winner ?? null);
       mounted = false;
     };
   }, [liveUrl]);
+
+  const displayWallet = winner?.wallet || "—";
 
   return (
     <div className="card">
@@ -119,7 +130,6 @@ setWinner(data?.winner ?? null);
         >
           {winner ? (
             <>
-              {/* CELEBRATION HERO */}
               {frozen ? (
                 <div
                   style={{
@@ -135,7 +145,6 @@ setWinner(data?.winner ?? null);
                     overflow: "hidden",
                   }}
                 >
-                  {/* sparkle dots */}
                   <div
                     style={{
                       position: "absolute",
@@ -157,25 +166,16 @@ setWinner(data?.winner ?? null);
                     🏆 CHAMPION
                   </div>
 
-                  {/* Official copy under title */}
                   <div style={{ marginTop: 6, fontSize: 14, opacity: 0.9 }}>
                     Contest concluded.
                     <br />
                     This is the official winner of the Winter Arcade.
                   </div>
 
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 20,
-                      fontWeight: 800,
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {winner.wallet}
+                  <div style={{ marginTop: 10, fontSize: 20, fontWeight: 800 }}>
+                    {shortWallet(displayWallet)}
                   </div>
 
-                  {/* Final note under wallet */}
                   <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
                     Final results — leaderboard frozen
                   </div>
@@ -183,58 +183,24 @@ setWinner(data?.winner ?? null);
               ) : (
                 <>
                   <div style={{ fontSize: 12, opacity: 0.85 }}>🏆 CURRENT LEADER</div>
-                  <div
-                    style={{
-                      fontSize: 26,
-                      fontWeight: 800,
-                      marginTop: 8,
-                      wordBreak: "break-all",
-                      letterSpacing: 0.2,
-                    }}
-                  >
-                    {winner.wallet}
+                  <div style={{ fontSize: 26, fontWeight: 800, marginTop: 8, letterSpacing: 0.2 }}>
+                    {shortWallet(displayWallet)}
                   </div>
                 </>
               )}
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 18,
-                  flexWrap: "wrap",
-                  marginTop: 16,
-                }}
-              >
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 16 }}>
                 <Stat label="TOTAL" value={winner.total} big />
                 <Stat label="ICE SLALOM" value={winner.best_slalom} />
                 <Stat label="SNOWBALL FRENZY" value={winner.best_snowball} />
               </div>
 
-              {/* CTA */}
-              <div
-                style={{
-                  marginTop: 18,
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
+              <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <Link className="btn" to="/wall-of-fame">
                   🏆 Wall of Fame
                 </Link>
-
-                {frozen ? (
-                  <a className="btn" href={finalUrl} target="_blank" rel="noreferrer">
-                    🔒 Final JSON (Official)
-                  </a>
-                ) : (
-                  <a className="btn" href={liveUrl} target="_blank" rel="noreferrer">
-                    📄 Live JSON
-                  </a>
-                )}
               </div>
 
-              {/* NOTE */}
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
                 {frozen
                   ? "Leaderboard frozen: this result is final."
@@ -248,23 +214,13 @@ setWinner(data?.winner ?? null);
                 No scores have been submitted so far.
               </div>
 
-              <div
-                style={{
-                  marginTop: 16,
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
+              <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <Link className="btn" to="/arcade">
                   🎮 Back to Arcade
                 </Link>
                 <Link className="btn" to="/wall-of-fame">
                   🏆 Wall of Fame
                 </Link>
-                <a className="btn" href={liveUrl} target="_blank" rel="noreferrer">
-                  📄 Live JSON
-                </a>
               </div>
             </>
           )}
@@ -286,13 +242,7 @@ function Stat({ label, value, big = false }) {
       }}
     >
       <div style={{ fontSize: 12, opacity: 0.78 }}>{label}</div>
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: big ? 22 : 18,
-          fontWeight: big ? 800 : 650,
-        }}
-      >
+      <div style={{ marginTop: 6, fontSize: big ? 22 : 18, fontWeight: big ? 800 : 650 }}>
         {value ?? 0}
       </div>
     </div>

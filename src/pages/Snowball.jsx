@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "../components/BackButton.jsx";
 import { submitScore as submitScoreApi } from "../lib/scoreApi";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { checkHolderAccess, getGateConfig } from "../lib/gating.js";
 
 export default function Snowball() {
   const { publicKey, connected } = useWallet();
@@ -20,16 +21,56 @@ export default function Snowball() {
   const [autoStatus, setAutoStatus] = useState("");
   const lastSubmittedRef = useRef(null);
 
+  // Gating state
+  const [gate, setGate] = useState({
+    enabled: false,
+    loading: false,
+    ok: true,
+    allowed: true,
+    balanceUi: 0,
+    threshold: 0,
+    error: "",
+  });
+
+  useEffect(() => {
+    const cfg = getGateConfig();
+    setGate((g) => ({ ...g, enabled: cfg.enabled, threshold: cfg.threshold }));
+
+    if (!connected || !wallet) return;
+
+    let cancelled = false;
+    (async () => {
+      setGate((g) => ({ ...g, loading: true, error: "" }));
+      const res = await checkHolderAccess(wallet);
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setGate((g) => ({ ...g, loading: false, ok: false, allowed: false, error: res.error || "gating failed" }));
+        return;
+      }
+
+      setGate((g) => ({
+        ...g,
+        loading: false,
+        ok: true,
+        allowed: res.allowed,
+        balanceUi: res.balanceUi,
+        threshold: res.threshold,
+        error: "",
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, wallet]);
+
   useEffect(() => {
     function onMessage(e) {
-      // DEBUG (puoi commentare dopo)
-      // console.log("POSTMESSAGE RECEIVED:", e.origin, e.data);
-
       const isDev =
         window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
       if (e.origin !== window.location.origin && !(isDev && e.origin === "null")) return;
-
       if (!e.data || typeof e.data !== "object") return;
 
       const { type, game, score } = e.data;
@@ -41,6 +82,12 @@ export default function Snowball() {
 
       if (!connected || !wallet) {
         setAutoStatus("Score received, but wallet not connected.");
+        return;
+      }
+
+      // ✅ blocca auto-submit se gating attivo e non allowed
+      if (gate.enabled && !gate.allowed) {
+        setAutoStatus(`Holders-only: blocked ⛔ (need ${gate.threshold} tokens).`);
         return;
       }
 
@@ -71,7 +118,7 @@ export default function Snowball() {
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [connected, wallet]);
+  }, [connected, wallet, gate.enabled, gate.allowed, gate.threshold]);
 
   const onSubmitTestScore = async () => {
     try {
@@ -79,6 +126,12 @@ export default function Snowball() {
 
       if (!connected || !wallet) {
         setStatus({ loading: false, msg: "Connect your wallet first." });
+        return;
+      }
+
+      // ✅ blocca manual submit se gating attivo e non allowed
+      if (gate.enabled && !gate.allowed) {
+        setStatus({ loading: false, msg: `Holders-only: need ${gate.threshold} tokens.` });
         return;
       }
 
@@ -121,7 +174,7 @@ export default function Snowball() {
             This game is holders-only. Use the button in the top-right corner to connect your wallet.
           </p>
           <p className="p" style={{ opacity: 0.75 }}>
-            (If you are connected but still blocked later, that will be the token threshold check.)
+            (After launch, access will require the token threshold.)
           </p>
         </div>
       ) : (
@@ -130,22 +183,46 @@ export default function Snowball() {
             Wallet: <b>{wallet || "—"}</b>
           </p>
 
-          <div
-            style={{
-              marginTop: 12,
-              borderRadius: 14,
-              overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
-            <iframe
-              title="Snowball Frenzy Game"
-              src={gameUrl}
-              style={{ width: "100%", height: 520, border: "0", display: "block" }}
-              sandbox="allow-scripts allow-same-origin allow-pointer-lock"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+          {gate.enabled ? (
+            <p className="p" style={{ marginTop: 8, opacity: 0.85 }}>
+              Access: {gate.loading ? "checking…" : gate.allowed ? "allowed ✅" : "blocked ⛔"}{" "}
+              {!gate.loading ? (
+                <span style={{ opacity: 0.8 }}>
+                  (balance: {gate.balanceUi} / {gate.threshold})
+                </span>
+              ) : null}
+              {gate.error ? <span style={{ color: "#ffb4b4" }}> — {gate.error}</span> : null}
+            </p>
+          ) : (
+            <p className="p" style={{ marginTop: 8, opacity: 0.7 }}>
+              Access: DEV MODE (mint not set yet) ✅
+            </p>
+          )}
+
+          {(!gate.enabled || gate.allowed) ? (
+            <div
+              style={{
+                marginTop: 12,
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.12)",
+              }}
+            >
+              <iframe
+                title="Snowball Frenzy Game"
+                src={gameUrl}
+                style={{ width: "100%", height: 520, border: "0", display: "block" }}
+                sandbox="allow-scripts allow-same-origin allow-pointer-lock"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, padding: 14, borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)" }}>
+              <p className="p" style={{ margin: 0 }}>
+                Holders-only: requires <b>{gate.threshold}</b> tokens to play.
+              </p>
+            </div>
+          )}
 
           {/* Manual test submit */}
           <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -170,7 +247,7 @@ export default function Snowball() {
 
             <button
               onClick={onSubmitTestScore}
-              disabled={status.loading}
+              disabled={status.loading || (gate.enabled && !gate.allowed)}
               style={{ padding: "8px 12px", borderRadius: 10, cursor: "pointer" }}
             >
               {status.loading ? "Submitting..." : "Submit score"}

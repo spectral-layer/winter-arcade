@@ -10,6 +10,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "https://spectral-layer.github.io",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
 ]);
 
 function getCorsHeaders(req: Request) {
@@ -22,7 +24,7 @@ function getCorsHeaders(req: Request) {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
+      "authorization, x-client-info, apikey, content-type",
     "Vary": "Origin",
   };
 }
@@ -33,6 +35,18 @@ function jsonResponse(req: Request, body: unknown, status = 200) {
     status,
     headers: { ...cors, "Content-Type": "application/json" },
   });
+}
+
+function canonicalizeGame(gameRaw: string) {
+  const g = String(gameRaw ?? "").trim();
+
+  // Canonical mapping / aliases
+  if (g === "ice_slalom") return "slalom";
+  if (g === "snowball_frenzy") return "snowball";
+  if (g.toLowerCase() === "ice slalom") return "slalom";
+  if (g.toLowerCase() === "snowball frenzy") return "snowball";
+
+  return g;
 }
 
 Deno.serve(async (req) => {
@@ -48,6 +62,7 @@ Deno.serve(async (req) => {
   const frozen =
     (Deno.env.get("LEADERBOARD_FROZEN") || "false").toLowerCase() === "true";
   if (frozen) {
+    // soft reject: no error spam in console, UI can show "frozen"
     return jsonResponse(req, {
       ok: true,
       accepted: false,
@@ -76,28 +91,24 @@ Deno.serve(async (req) => {
     }
 
     const wallet = String(payload.wallet ?? "").trim();
-    const game_in = String(payload.game ?? "").trim();
-
-    // Canonical mapping
-    let game = game_in;
-    if (game_in === "ice_slalom") game = "slalom";
-    if (game_in === "snowball_frenzy") game = "snowball";
-    if (game_in.toLowerCase() === "ice slalom") game = "slalom";
-    if (game_in.toLowerCase() === "snowball frenzy") game = "snowball";
-
+    const game = canonicalizeGame(payload.game ?? "");
     const score = Number(payload.score);
 
+    // Validation
     if (!wallet || wallet.length < 5) {
       return jsonResponse(req, { ok: false, error: "Invalid wallet" }, 400);
     }
-    if (!game) {
+
+    // Allow only supported games (hardening)
+    if (game !== "slalom" && game !== "snowball") {
       return jsonResponse(req, { ok: false, error: "Invalid game" }, 400);
     }
+
     if (!Number.isFinite(score) || score < 0) {
       return jsonResponse(req, { ok: false, error: "Invalid score" }, 400);
     }
 
-    // Best score (serve anche per rispondere sempre con current_best)
+    // Best score for this wallet+game (we always return current_best)
     const { data: bestRow, error: bestErr } = await supabase
       .from("scores")
       .select("score")
@@ -113,12 +124,14 @@ Deno.serve(async (req) => {
 
     const currentBest = bestRow?.score ?? null;
 
-    // Cooldown (wallet-wide)
-    const COOLDOWN_MS = 8000;
+    // ---- Anti-spam block A: cooldown per wallet+game ----
+    const COOLDOWN_MS = 6_000;
+
     const { data: lastRow, error: lastErr } = await supabase
       .from("scores")
-      .select("created_at")
+      .select("created_at, score")
       .eq("wallet", wallet)
+      .eq("game", game)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -144,7 +157,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Not improved
+    // ---- Anti-spam block B: exact duplicate score (same wallet+game) ----
+    if (lastRow?.score !== undefined && lastRow?.score !== null) {
+      if (Number(lastRow.score) === Number(score)) {
+        return jsonResponse(req, {
+          ok: true,
+          accepted: false,
+          reason: "duplicate_score",
+          current_best: currentBest,
+          submitted: score,
+        });
+      }
+    }
+
+    // Not improved (keeps DB clean)
     if (currentBest !== null && Number(score) <= Number(currentBest)) {
       return jsonResponse(req, {
         ok: true,

@@ -1,6 +1,17 @@
+// src/pages/WallOfFame.jsx
 import { useEffect, useState } from "react";
 import BackButton from "../components/BackButton.jsx";
 import { Link } from "react-router-dom";
+import { shortWallet } from "../lib/walletUi";
+
+function supabaseHeaders() {
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return {
+    apikey: anon,
+    authorization: `Bearer ${anon}`,
+    "x-supabase-client-platform": "winter-arcade-web",
+  };
+}
 
 export default function WallOfFame() {
   const [loading, setLoading] = useState(true);
@@ -18,17 +29,11 @@ export default function WallOfFame() {
         setErr("");
 
         const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
         const url = `${baseUrl}/functions/v1/wall-of-fame`;
 
         const res = await fetch(url, {
           method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: anonKey,
-            Authorization: `Bearer ${anonKey}`,
-          },
+          headers: supabaseHeaders(),
         });
 
         const data = await res.json().catch(() => null);
@@ -44,7 +49,7 @@ export default function WallOfFame() {
         setTop20(Array.isArray(data?.top20) ? data.top20 : []);
       } catch (e) {
         if (!mounted) return;
-        setErr(e?.message || "Errore caricamento Wall of Fame");
+        setErr(e?.message || "Wall of Fame load error");
       } finally {
         if (!mounted) return;
         setLoading(false);
@@ -66,30 +71,7 @@ export default function WallOfFame() {
         🏅 View Winner
       </Link>
 
-      {/* SHOW JSON LINKS ONLY WHEN FROZEN === TRUE */}
-      {frozen && (
-        <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a
-            className="btn"
-            href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/wall-of-fame`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            📄 Live JSON
-          </a>
-
-          <a
-            className="btn"
-            href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/final-results`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            🔒 Final JSON
-          </a>
-        </div>
-      )}
-
-      {loading && <p className="p">Caricamento…</p>}
+      {loading && <p className="p">Loading…</p>}
       {err && (
         <p className="p" style={{ color: "tomato" }}>
           {err}
@@ -106,11 +88,19 @@ export default function WallOfFame() {
               border: "1px solid rgba(255,255,255,0.12)",
             }}
           >
-            <h3 style={{ margin: 0, marginBottom: 8 }}>🥇 Winner</h3>
+            <h3 style={{ margin: 0, marginBottom: 8 }}>
+              🥇 Winner{" "}
+              {frozen ? (
+                <span style={{ fontSize: 12, opacity: 0.85 }}>(Official / Frozen)</span>
+              ) : (
+                <span style={{ fontSize: 12, opacity: 0.85 }}>(Live)</span>
+              )}
+            </h3>
+
             {winner ? (
               <div>
                 <div>
-                  <strong>Wallet:</strong> {winner.wallet}
+                  <strong>Wallet:</strong> {shortWallet(winner.wallet || "—")}
                 </div>
                 <div>
                   <strong>Total:</strong> {winner.total}
@@ -123,7 +113,7 @@ export default function WallOfFame() {
                 </div>
               </div>
             ) : (
-              <div>Nessun dato.</div>
+              <div>No data yet.</div>
             )}
           </div>
 
@@ -141,28 +131,36 @@ export default function WallOfFame() {
                     <th style={{ padding: "8px 6px" }}>Snowball</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {top20.map((row, i) => (
                     <tr
-                      key={`${row.wallet}-${i}`}
+                      key={`${row.wallet || "—"}-${i}`}
                       style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       <td style={{ padding: "8px 6px" }}>{i + 1}</td>
-                      <td style={{ padding: "8px 6px" }}>{row.wallet}</td>
+                      <td style={{ padding: "8px 6px" }}>{shortWallet(row.wallet || "—")}</td>
                       <td style={{ padding: "8px 6px" }}>{row.total}</td>
                       <td style={{ padding: "8px 6px" }}>{row.best_slalom}</td>
                       <td style={{ padding: "8px 6px" }}>{row.best_snowball}</td>
                     </tr>
                   ))}
+
                   {top20.length === 0 && (
                     <tr style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                       <td style={{ padding: "8px 6px" }} colSpan={5}>
-                        Nessun dato.
+                        No data yet.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+              {frozen
+                ? "Leaderboard is frozen: positions are final."
+                : "Leaderboard is live: positions may change until frozen."}
             </div>
           </div>
         </>

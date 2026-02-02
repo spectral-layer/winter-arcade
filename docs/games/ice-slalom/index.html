@@ -1,9 +1,50 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
-  <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#111;color:#fff;font-family:system-ui">
-    <div>Game placeholder ✅</div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Ice Slalom</title>
+  </head>
+  <body style="margin:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;height:100vh;background:#111;color:#fff;font-family:system-ui">
+    <div>Ice Slalom placeholder ✅</div>
 
-    <!-- NIENTE postMessage per ora -->
+    <button id="send" style="padding:10px 14px;border-radius:10px;cursor:pointer">
+      Send TEST score
+    </button>
+
+    <div id="status" style="opacity:.8;font-size:14px"></div>
+
+    <script>
+      const GAME = "slalom";
+
+      function getParentOrigin() {
+        // Caso 1: browser supporta ancestorOrigins (Chrome)
+        if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) {
+          return window.location.ancestorOrigins[0];
+        }
+
+        // Caso 2: document.referrer è disponibile
+        // (quando l'iframe è caricato da una pagina parent)
+        if (document.referrer) {
+          try {
+            return new URL(document.referrer).origin;
+          } catch {}
+        }
+
+        // Fallback: non sappiamo -> "*"
+        return "*";
+      }
+
+      document.getElementById("send").addEventListener("click", () => {
+        const score = Math.floor(Math.random() * 8000); // così superi più facilmente 5000
+        const payload = { type: "WINTER_ARCADE_SCORE", game: GAME, score };
+
+        const targetOrigin = getParentOrigin();
+        window.parent.postMessage(payload, targetOrigin);
+
+        const st = document.getElementById("status");
+        st.textContent = `Sent score ${score} → parent (${targetOrigin}) ✅`;
+      });
+    </script>
   </body>
 </html>
