@@ -1,79 +1,99 @@
 // supabase/functions/wall-of-fame/index.ts
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-  "https://spectral-layer.github.io",
-]);
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = ALLOWED_ORIGINS.has(origin)
-    ? origin
-    : "https://spectral-layer.github.io";
-
+function corsHeaders(origin: string | null) {
   return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Origin": origin ?? "*",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
-    "Vary": "Origin",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
   };
 }
 
-function jsonResponse(req: Request, body: unknown, status = 200) {
-  const cors = getCorsHeaders(req);
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
-}
+serve(async (req) => {
+  const origin = req.headers.get("origin");
+  const headers = {
+    "Content-Type": "application/json",
+    ...corsHeaders(origin),
+  };
 
-Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: getCorsHeaders(req) });
-  }
-
-  if (req.method !== "GET") {
-    return jsonResponse(req, { ok: false, error: "Method not allowed" }, 405);
+    return new Response("ok", { headers });
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const url = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return jsonResponse(req, { ok: false, error: "Missing env vars" }, 500);
+    if (!url || !serviceKey) {
+      return new Response(
+        JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }),
+        { status: 500, headers }
+      );
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+    });
 
-    const { data, error } = await supabase
-      .from("leaderboard")
-      .select("wallet,best_slalom,best_snowball,total")
-      .order("total", { ascending: false })
-      .order("wallet", { ascending: true })
-      .limit(20);
+    // freeze flag (se lo usi già nel progetto)
+    const frozen = (Deno.env.get("LEADERBOARD_FROZEN") || "false").toLowerCase() === "true";
 
-    if (error) {
-      console.error("Wall of Fame query error:", error);
-      return jsonResponse(req, { ok: false, error: error.message }, 500);
+    // ✅ SOLO snowball
+    // Se frozen=true usa la view/table wall_of_fame (se esiste e ha best_snowball/total)
+    // Altrimenti usa leaderboard_best.
+    let rows: any[] = [];
+
+    if (frozen) {
+      const { data, error } = await supabase
+        .from("wall_of_fame")
+        .select("wallet,total,best_snowball")
+        .order("total", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      rows = data ?? [];
+    } else {
+      // live: prendi i best per wallet del solo gioco snowball
+      const { data, error } = await supabase
+        .from("leaderboard_best")
+        .select("wallet,score,game")
+        .eq("game", "snowball")
+        .order("score", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      rows = (data ?? []).map((r: any) => ({
+        wallet: r.wallet,
+        best_snowball: r.score,
+        total: r.score, // con un solo gioco, total = best_snowball
+      }));
     }
 
-    const winner = data && data.length > 0 ? data[0] : null;
+    const winner = rows.length
+      ? {
+          wallet: rows[0].wallet,
+          total: rows[0].total ?? rows[0].best_snowball ?? 0,
+          best_snowball: rows[0].best_snowball ?? 0,
+        }
+      : null;
 
-    return jsonResponse(req, {
-      ok: true,
-      frozen: (Deno.env.get("LEADERBOARD_FROZEN") || "false").toLowerCase() === "true",
-      updated_at: new Date().toISOString(),
-      winner,
-      top20: data ?? [],
+    const top20 = rows.map((r) => ({
+      wallet: r.wallet,
+      total: r.total ?? r.best_snowball ?? 0,
+      best_snowball: r.best_snowball ?? 0,
+    }));
+
+    return new Response(JSON.stringify({ frozen, winner, top20 }), {
+      status: 200,
+      headers,
     });
   } catch (e) {
-    console.error("Unhandled error:", e);
-    return jsonResponse(req, { ok: false, error: "Unhandled server error" }, 500);
+    return new Response(
+      JSON.stringify({ error: e?.message || String(e) }),
+      { status: 500, headers }
+    );
   }
 });

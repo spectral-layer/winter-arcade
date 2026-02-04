@@ -8,7 +8,6 @@ import WallOfFame from "./pages/WallOfFame";
 import Winner from "./pages/Winner";
 
 // ✅ IMPORTA le pagine dei giochi (adatta i path se sono in /pages o /games)
-import IceSlalom from "./pages/IceSlalom";
 import Snowball from "./pages/Snowball";
 
 export default function App() {
@@ -19,7 +18,6 @@ export default function App() {
 
         {/* ✅ Arcade come parent + nested routes */}
         <Route path="/arcade" element={<Arcade />}>
-          <Route path="ice-slalom" element={<IceSlalom />} />
           <Route path="snowball" element={<Snowball />} />
         </Route>
 

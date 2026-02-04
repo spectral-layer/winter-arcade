@@ -103,12 +103,6 @@ export default function WallOfFame() {
                   <strong>Wallet:</strong> {shortWallet(winner.wallet || "—")}
                 </div>
                 <div>
-                  <strong>Total:</strong> {winner.total}
-                </div>
-                <div>
-                  <strong>Ice Slalom:</strong> {winner.best_slalom}
-                </div>
-                <div>
                   <strong>Snowball Frenzy:</strong> {winner.best_snowball}
                 </div>
               </div>
@@ -126,8 +120,6 @@ export default function WallOfFame() {
                   <tr style={{ textAlign: "left" }}>
                     <th style={{ padding: "8px 6px" }}>#</th>
                     <th style={{ padding: "8px 6px" }}>Wallet</th>
-                    <th style={{ padding: "8px 6px" }}>Total</th>
-                    <th style={{ padding: "8px 6px" }}>Ice Slalom</th>
                     <th style={{ padding: "8px 6px" }}>Snowball</th>
                   </tr>
                 </thead>
@@ -140,15 +132,13 @@ export default function WallOfFame() {
                     >
                       <td style={{ padding: "8px 6px" }}>{i + 1}</td>
                       <td style={{ padding: "8px 6px" }}>{shortWallet(row.wallet || "—")}</td>
-                      <td style={{ padding: "8px 6px" }}>{row.total}</td>
-                      <td style={{ padding: "8px 6px" }}>{row.best_slalom}</td>
                       <td style={{ padding: "8px 6px" }}>{row.best_snowball}</td>
                     </tr>
                   ))}
 
                   {top20.length === 0 && (
                     <tr style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                      <td style={{ padding: "8px 6px" }} colSpan={5}>
+                      <td style={{ padding: "8px 6px" }} colSpan={3}>
                         No data yet.
                       </td>
                     </tr>

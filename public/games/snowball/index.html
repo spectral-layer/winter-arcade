@@ -1,44 +1,113 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>Snowball Frenzy</title>
+    <link rel="stylesheet" href="./style.css" />
   </head>
-  <body style="margin:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;height:100vh;background:#111;color:#fff;font-family:system-ui">
-    <div>Snowball placeholder ✅</div>
 
-    <button id="send" style="padding:10px 14px;border-radius:10px;cursor:pointer">
-      Send TEST score
-    </button>
+  <body>
+    <div id="app" class="app">
+      <!-- Background (cartoon style) -->
+      <div class="bg" aria-hidden="true">
+        <!-- 1 immagine unica, oppure più layer se vuoi (per ora 1 è il più veloce) -->
+        <div class="bg-image"></div>
+        <div class="bg-vignette"></div>
+        <div class="bg-snow"></div>
+      </div>
 
-    <div id="status" style="opacity:.8;font-size:14px"></div>
+      <!-- Canvas sopra al background -->
+      <canvas id="game" class="game" width="960" height="540"></canvas>
 
+      <!-- HUD -->
+      <div class="hud">
+        <div class="hud-left">
+          <div class="badge">☃️ SNOWBALL FRENZY</div>
+          <div class="stats">
+            <div class="stat"><span>Score</span><b id="uiScore">0</b></div>
+            <div class="stat"><span>Time</span><b id="uiTime">30</b></div>
+            <div class="stat"><span>Streak</span><b id="uiStreak">0</b></div>
+          </div>
+        </div>
+
+        <div class="hud-right">
+          <!-- Exit (esce dal fullscreen + manda segnale al parent per tornare indietro se vuoi) -->
+          <button id="btnExit" class="btn danger" type="button">✕ Exit</button>
+          <button id="btnSound" class="btn" type="button">🔊 Sound</button>
+          <button id="btnRestart" class="btn" type="button">↻ Restart</button>
+        </div>
+      </div>
+
+      <!-- START OVERLAY -->
+      <div id="overlay" class="overlay">
+        <div class="panel">
+          <h1>Tap to Start</h1>
+          <p class="muted">Hold to charge • release to throw • drag to aim</p>
+          <button id="btnStart" class="btn primary" type="button">Start</button>
+          <p class="tiny muted">Fullscreen starts after tap (browser rule)</p>
+        </div>
+      </div>
+
+      <!-- GAME OVER -->
+      <div id="gameover" class="overlay hidden">
+        <div class="panel">
+          <h1>Frenzy Complete</h1>
+          <p class="muted">Final score: <b id="uiFinal">0</b></p>
+          <div class="row">
+            <button id="btnSend" class="btn primary" type="button">Send Score</button>
+            <button id="btnPlayAgain" class="btn" type="button">Play Again</button>
+          </div>
+          <p class="tiny muted">Score will be posted to Winter Arcade.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fullscreen + Exit logic (non tocca game.js) -->
     <script>
-      const GAME = "snowball";
+      (function () {
+        const app = document.getElementById("app");
+        const btnStart = document.getElementById("btnStart");
+        const btnExit = document.getElementById("btnExit");
 
-      function getParentOrigin() {
-        if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) {
-          return window.location.ancestorOrigins[0];
-        }
-        if (document.referrer) {
+        async function enterFullscreen() {
           try {
-            return new URL(document.referrer).origin;
-          } catch {}
+            if (document.fullscreenElement) return;
+            if (app?.requestFullscreen) await app.requestFullscreen({ navigationUI: "hide" });
+          } catch (_) {
+            // ignore: browser may block
+          }
         }
-        return "*";
-      }
 
-      document.getElementById("send").addEventListener("click", () => {
-        const score = Math.floor(Math.random() * 8000);
-        const payload = { type: "WINTER_ARCADE_SCORE", game: GAME, score };
+        async function exitFullscreen() {
+          try {
+            if (document.fullscreenElement && document.exitFullscreen) {
+              await document.exitFullscreen();
+            }
+          } catch (_) {}
+        }
 
-        const targetOrigin = getParentOrigin();
-        window.parent.postMessage(payload, targetOrigin);
+        btnStart?.addEventListener("click", () => {
+          // deve essere chiamato dentro un "user gesture"
+          enterFullscreen();
+        });
 
-        const st = document.getElementById("status");
-        st.textContent = `Sent score ${score} → parent (${targetOrigin}) ✅`;
-      });
+        btnExit?.addEventListener("click", async () => {
+          await exitFullscreen();
+
+          // opzionale: avvisa la pagina parent (React) per tornare indietro
+          // (non rompe nulla se non ascoltato)
+          window.parent?.postMessage({ type: "WINTER_ARCADE_EXIT", game: "snowball" }, "*");
+        });
+
+        // fallback mobile: se l’utente esce dal fullscreen col gesture, non fare nulla
+        document.addEventListener("fullscreenchange", () => {});
+      })();
     </script>
+
+    <script src="./game.js"></script>
   </body>
 </html>

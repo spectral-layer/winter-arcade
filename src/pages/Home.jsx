@@ -14,7 +14,7 @@ export default function Home() {
 
       <div className="homeCoverPanel">
         <h1 className="heroTitle">WINTER OLYMPIC GAMES</h1>
-        <p className="heroSubtitle">Skill-based winter mini-games for holders.</p>
+        <p className="heroSubtitle">Skill-based winter mini-game for holders.</p>
 
         <div className="heroCtaRow">
           <Link className="btn ctaStrong" to="/arcade">

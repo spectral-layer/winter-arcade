@@ -5,18 +5,32 @@ function nowMs() {
   return Date.now();
 }
 
-// Allowlist dev+prod
-const ALLOWED_ORIGINS = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "https://spectral-layer.github.io",
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-]);
+// ✅ allow: any localhost:* or 127.0.0.1:* + GitHub Pages host
+function isAllowedOrigin(origin: string) {
+  if (!origin) return false;
+
+  try {
+    const u = new URL(origin);
+    const host = u.hostname;
+    const port = u.port; // "" if default
+
+    // localhost dev (any port)
+    if (host === "localhost" || host === "127.0.0.1") return true;
+
+    // GitHub Pages host (no path in Origin)
+    if (host === "spectral-layer.github.io") return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
-  const allowOrigin = ALLOWED_ORIGINS.has(origin)
+
+  // If allowed, echo origin. Otherwise, set a safe default (same host you serve from in prod)
+  const allowOrigin = isAllowedOrigin(origin)
     ? origin
     : "https://spectral-layer.github.io";
 
@@ -24,7 +38,7 @@ function getCorsHeaders(req: Request) {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
+      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
     "Vary": "Origin",
   };
 }
@@ -40,7 +54,6 @@ function jsonResponse(req: Request, body: unknown, status = 200) {
 function canonicalizeGame(gameRaw: string) {
   const g = String(gameRaw ?? "").trim();
 
-  // Canonical mapping / aliases
   if (g === "ice_slalom") return "slalom";
   if (g === "snowball_frenzy") return "snowball";
   if (g.toLowerCase() === "ice slalom") return "slalom";
@@ -59,10 +72,10 @@ Deno.serve(async (req) => {
     return jsonResponse(req, { ok: false, error: "Method not allowed" }, 405);
   }
 
+  // Freeze gate (must return CORS too)
   const frozen =
     (Deno.env.get("LEADERBOARD_FROZEN") || "false").toLowerCase() === "true";
   if (frozen) {
-    // soft reject: no error spam in console, UI can show "frozen"
     return jsonResponse(req, {
       ok: true,
       accepted: false,
@@ -94,12 +107,10 @@ Deno.serve(async (req) => {
     const game = canonicalizeGame(payload.game ?? "");
     const score = Number(payload.score);
 
-    // Validation
     if (!wallet || wallet.length < 5) {
       return jsonResponse(req, { ok: false, error: "Invalid wallet" }, 400);
     }
 
-    // Allow only supported games (hardening)
     if (game !== "slalom" && game !== "snowball") {
       return jsonResponse(req, { ok: false, error: "Invalid game" }, 400);
     }
@@ -108,7 +119,7 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { ok: false, error: "Invalid score" }, 400);
     }
 
-    // Best score for this wallet+game (we always return current_best)
+    // Best score for this wallet+game
     const { data: bestRow, error: bestErr } = await supabase
       .from("scores")
       .select("score")
@@ -124,7 +135,7 @@ Deno.serve(async (req) => {
 
     const currentBest = bestRow?.score ?? null;
 
-    // ---- Anti-spam block A: cooldown per wallet+game ----
+    // Anti-spam A: cooldown
     const COOLDOWN_MS = 6_000;
 
     const { data: lastRow, error: lastErr } = await supabase
@@ -157,7 +168,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ---- Anti-spam block B: exact duplicate score (same wallet+game) ----
+    // Anti-spam B: exact duplicate last score
     if (lastRow?.score !== undefined && lastRow?.score !== null) {
       if (Number(lastRow.score) === Number(score)) {
         return jsonResponse(req, {
@@ -170,7 +181,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Not improved (keeps DB clean)
+    // Not improved
     if (currentBest !== null && Number(score) <= Number(currentBest)) {
       return jsonResponse(req, {
         ok: true,
