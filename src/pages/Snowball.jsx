@@ -30,6 +30,7 @@ export default function Snowball() {
     balanceUi: 0,
     threshold: 0,
     error: "",
+    program: "",
   });
 
   async function loadLeaderboard() {
@@ -46,7 +47,11 @@ export default function Snowball() {
 
   useEffect(() => {
     const cfg = getGateConfig();
-    setGate((g) => ({ ...g, enabled: cfg.enabled, threshold: cfg.threshold }));
+    setGate((g) => ({
+      ...g,
+      enabled: cfg.enabled,
+      threshold: cfg.threshold,
+    }));
 
     if (!connected || !wallet) return;
 
@@ -63,6 +68,8 @@ export default function Snowball() {
           ok: false,
           allowed: false,
           error: res.error || "gating failed",
+          program: "",
+          balanceUi: 0,
         }));
         return;
       }
@@ -75,6 +82,7 @@ export default function Snowball() {
         balanceUi: res.balanceUi,
         threshold: res.threshold,
         error: "",
+        program: res.program || "",
       }));
     })();
 
@@ -144,7 +152,9 @@ export default function Snowball() {
     <div style={{ width: "100%", maxWidth: "none" }}>
       <div style={{ padding: "14px 16px 10px" }}>
         <BackButton to="/arcade" label="← Back to Arcade" />
-        <h2 className="h2" style={{ marginTop: 10 }}>❄️ Snowball Frenzy</h2>
+        <h2 className="h2" style={{ marginTop: 10 }}>
+          ❄️ Snowball Frenzy
+        </h2>
 
         {!connected ? (
           <div style={{ marginTop: 10 }}>
@@ -161,7 +171,8 @@ export default function Snowball() {
                 Access: {gate.loading ? "checking…" : gate.allowed ? "allowed ✅" : "blocked ⛔"}{" "}
                 {!gate.loading ? (
                   <span style={{ opacity: 0.8 }}>
-                    (balance: {gate.balanceUi} / {gate.threshold})
+                    (balance: {gate.balanceUi} / {gate.threshold}
+                    {gate.program ? ` — ${gate.program}` : ""})
                   </span>
                 ) : null}
                 {gate.error ? <span style={{ color: "#ffb4b4" }}> — {gate.error}</span> : null}
@@ -221,16 +232,28 @@ export default function Snowball() {
 
       <div style={{ padding: "14px 16px 18px" }}>
         {autoStatus ? (
-          <p className="p" style={{ marginTop: 0, opacity: 0.85 }}>{autoStatus}</p>
+          <p className="p" style={{ marginTop: 0, opacity: 0.85 }}>
+            {autoStatus}
+          </p>
         ) : null}
 
         <details open style={{ marginTop: 10 }}>
           <summary style={{ cursor: "pointer", userSelect: "none" }}>
-            <span className="p" style={{ margin: 0, fontWeight: 900 }}>🏆 Leaderboard (Top 10)</span>
+            <span className="p" style={{ margin: 0, fontWeight: 900 }}>
+              🏆 Leaderboard (Top 10)
+            </span>
           </summary>
 
           <div style={{ marginTop: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
               <p className="p" style={{ margin: 0, opacity: 0.7 }}>
                 Status: <b>{lbStatus}</b>
               </p>
