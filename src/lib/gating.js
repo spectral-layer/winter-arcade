@@ -1,11 +1,6 @@
 // src/lib/gating.js
 import { Connection, PublicKey } from "@solana/web3.js";
-import {
-  getAssociatedTokenAddress,
-  TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 const RPC_URL =
   import.meta.env.VITE_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
@@ -24,14 +19,13 @@ function getEnvGateEnabled() {
   return !(v === "0" || v === "false" || v === "off" || v === "no");
 }
 
-// Cache a single Connection (faster + avoids re-creating per request)
+// Cache a single Connection
 let _connection = null;
 function getConnection() {
   if (!_connection) _connection = new Connection(RPC_URL, "confirmed");
   return _connection;
 }
 
-// "enabled" should mean: gateEnabled=true AND mint valid AND threshold > 0
 export function getGateConfig() {
   const mintStr = getEnvMint();
   const threshold = getEnvThreshold();
@@ -39,12 +33,10 @@ export function getGateConfig() {
 
   if (!gateEnabled) return { enabled: false, rpcUrl: RPC_URL, mint: "", threshold };
 
-  // DEV MODE if mint empty or threshold invalid
   if (!mintStr || threshold <= 0) {
     return { enabled: false, rpcUrl: RPC_URL, mint: "", threshold };
   }
 
-  // If mint is not base58-valid, do NOT enable gating (avoid blocking the site)
   try {
     // eslint-disable-next-line no-new
     new PublicKey(mintStr);
@@ -60,21 +52,20 @@ export function getGateConfig() {
  *  { ok:true, allowed:boolean, balanceUi:number, threshold:number, program:string }
  * or { ok:false, error:string }
  *
- * Tries TOKEN_2022 first (common for pump.fun), then classic SPL.
+ * Robust: scans token accounts by owner (Token-2022 + classic) and sums balances for the mint.
  */
 export async function checkHolderAccess(walletBase58) {
   try {
     const { enabled, mint, threshold } = getGateConfig();
 
-    // DEV MODE: allow access (site usable before launch)
+    // DEV MODE: allow access
     if (!enabled) {
       return { ok: true, allowed: true, balanceUi: 0, threshold, program: "DEV" };
     }
 
     if (!walletBase58) return { ok: false, error: "missing wallet" };
 
-    let owner;
-    let mintPk;
+    let owner, mintPk;
     try {
       owner = new PublicKey(walletBase58);
       mintPk = new PublicKey(mint);
@@ -85,49 +76,47 @@ export async function checkHolderAccess(walletBase58) {
     const connection = getConnection();
 
     const programsToTry = [
-      { label: "TOKEN_2022", tokenProgramId: TOKEN_2022_PROGRAM_ID },
-      { label: "TOKEN_CLASSIC", tokenProgramId: TOKEN_PROGRAM_ID },
+      { label: "TOKEN_2022", programId: TOKEN_2022_PROGRAM_ID },
+      { label: "TOKEN_CLASSIC", programId: TOKEN_PROGRAM_ID },
     ];
+
+    let totalUi = 0;
+    let foundIn = [];
 
     for (const p of programsToTry) {
       try {
-        const ata = await getAssociatedTokenAddress(
-          mintPk,
+        const parsed = await connection.getParsedTokenAccountsByOwner(
           owner,
-          false,
-          p.tokenProgramId,
-          ASSOCIATED_TOKEN_PROGRAM_ID
+          { programId: p.programId },
+          "confirmed"
         );
 
-        // Se ATA non esiste -> getTokenAccountBalance lancia -> passiamo al prossimo program
-        const bal = await connection.getTokenAccountBalance(ata);
+        for (const it of parsed.value) {
+          const info = it.account?.data?.parsed?.info;
+          if (!info) continue;
 
-        const amountStr = bal?.value?.amount ?? "0"; // raw integer as string
-        const decimals = bal?.value?.decimals ?? 0;
+          const accMint = String(info.mint || "");
+          if (accMint !== mintPk.toBase58()) continue;
 
-        const amountRaw = BigInt(amountStr);
-        const denom = 10n ** BigInt(decimals);
+          const tokenAmount = info.tokenAmount;
+          const ui = Number(tokenAmount?.uiAmount ?? 0);
+          if (Number.isFinite(ui) && ui > 0) totalUi += ui;
 
-        const balanceUi = Number(amountRaw) / Number(denom);
-
-        return {
-          ok: true,
-          allowed: balanceUi >= threshold,
-          balanceUi,
-          threshold,
-          program: p.label,
-        };
-      } catch (e) {
-        // prova prossimo programId
+          foundIn.push(p.label);
+        }
+      } catch {
+        // ignore and continue
       }
     }
 
+    const allowed = totalUi >= threshold;
+
     return {
       ok: true,
-      allowed: false,
-      balanceUi: 0,
+      allowed,
+      balanceUi: totalUi,
       threshold,
-      program: "NONE",
+      program: foundIn.length ? Array.from(new Set(foundIn)).join("+") : "NONE",
     };
   } catch (e) {
     return { ok: false, error: e?.message || "gating error" };
