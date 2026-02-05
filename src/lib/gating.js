@@ -1,6 +1,13 @@
 // src/lib/gating.js
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getAssociatedTokenAddress } from "@solana/spl-token";
+import {
+  getAssociatedTokenAddress,
+  getAccount,
+  getMint,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 
 const RPC_URL =
   import.meta.env.VITE_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
@@ -26,14 +33,11 @@ export function getGateConfig() {
   const mintStr = getEnvMint();
   const threshold = getEnvThreshold();
 
-  // DEV MODE if mint empty or threshold invalid
   if (!mintStr || threshold <= 0) {
     return { enabled: false, rpcUrl: RPC_URL, mint: "", threshold };
   }
 
-  // If mint is not base58-valid, do NOT enable gating (avoid blocking the site)
   try {
-    // just validate; we don't need the object here
     // eslint-disable-next-line no-new
     new PublicKey(mintStr);
   } catch {
@@ -45,10 +49,10 @@ export function getGateConfig() {
 
 /**
  * Returns:
- *  { ok:true, allowed:boolean, balanceUi:number, threshold:number }
+ *  { ok:true, allowed:boolean, balanceUi:number, threshold:number, program?:string }
  * or { ok:false, error:string }
  *
- * balanceUi is computed precisely from raw amount + decimals (not uiAmount float).
+ * Supports BOTH Token-2022 and classic SPL tokens.
  */
 export async function checkHolderAccess(walletBase58) {
   try {
@@ -67,35 +71,51 @@ export async function checkHolderAccess(walletBase58) {
       owner = new PublicKey(walletBase58);
       mintPk = new PublicKey(mint);
     } catch {
-      // If wallet/mint invalid, do NOT hard-block with cryptic errors
       return { ok: false, error: "invalid wallet or mint" };
     }
 
     const connection = getConnection();
 
-    // Associated Token Account (ATA)
-    const ata = await getAssociatedTokenAddress(mintPk, owner, false);
+    const programsToTry = [
+      { label: "TOKEN_2022", programId: TOKEN_2022_PROGRAM_ID },
+      { label: "TOKEN_CLASSIC", programId: TOKEN_PROGRAM_ID },
+    ];
 
-    // If ATA doesn't exist, getTokenAccountBalance will throw → treat as 0 balance
-    const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
+    for (const p of programsToTry) {
+      try {
+        // ATA depends on token programId
+        const ata = await getAssociatedTokenAddress(
+          mintPk,
+          owner,
+          false,
+          p.programId,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
 
-    const amountStr = bal?.value?.amount ?? "0"; // raw integer as string
-    const decimals = bal?.value?.decimals ?? 0;
+        // Fetch mint decimals using the same program
+        const mintInfo = await getMint(connection, mintPk, undefined, p.programId);
+        const decimals = mintInfo.decimals;
 
-    // Convert raw amount to UI number: amount / (10^decimals)
-    // Use Number for display; precise compare using raw threshold in UI tokens is ok here.
-    const amountRaw = BigInt(amountStr);
-    const denom = 10n ** BigInt(decimals);
+        // Fetch token account using the same program
+        const tokenAcc = await getAccount(connection, ata, undefined, p.programId);
 
-    // balanceUi as a JS number for UI (safe for typical SPL amounts; if huge, it may lose precision in display only)
-    const balanceUi = Number(amountRaw) / Number(denom);
+        const rawAmount = tokenAcc.amount; // bigint
+        const uiAmount = Number(rawAmount) / Math.pow(10, decimals);
 
-    return {
-      ok: true,
-      allowed: balanceUi >= threshold,
-      balanceUi,
-      threshold,
-    };
+        return {
+          ok: true,
+          allowed: uiAmount >= threshold,
+          balanceUi: uiAmount,
+          threshold,
+          program: p.label,
+        };
+      } catch (e) {
+        // try next program
+      }
+    }
+
+    // If no token account was found in either program
+    return { ok: true, allowed: false, balanceUi: 0, threshold, program: "NONE" };
   } catch (e) {
     return { ok: false, error: e?.message || "gating error" };
   }
