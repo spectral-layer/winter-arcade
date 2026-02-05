@@ -100,6 +100,18 @@ body {
   backdrop-filter: blur(10px);
 }
 
+/* ✅ NEW: panel in alto a sinistra (zona bianca, non copre le mascotte) */
+.homeCoverPanel.topLeft {
+  position: absolute;
+  top: 5%;
+  left: 4%;
+  bottom: auto;
+
+  max-width: 360px;
+  width: auto;
+  padding: 14px 14px;
+}
+
 .heroTitle {
   margin: 0;
   font-weight: 900;
@@ -253,3 +265,13 @@ body > .wallet-adapter-modal-wrapper,
   width: min(420px, 92vw) !important;
   max-height: calc(100vh - 32px) !important;
 }
+/* Arcade: align panel with the white hero image corner (without touching Home) */
+/* Arcade panel: fine alignment with hero logo */
+.homeCoverPanel.arcadePanel {
+  left: calc(50% - 490px); /* allineato al bordo sinistro area bianca */
+  top: 48px;              /* leggermente più in alto */
+  bottom: auto;
+
+  width: 336px;           /* più stretto */
+}
+

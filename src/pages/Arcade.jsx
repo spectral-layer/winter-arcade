@@ -63,7 +63,7 @@ export default function Arcade() {
     );
   }
 
-  // ✅ menu arcade (come prima)
+  // ✅ menu arcade
   return (
     <div className="homeCover">
       {/* background blur */}
@@ -74,15 +74,14 @@ export default function Arcade() {
       {/* foreground NO-CROP */}
       <img className="heroImg" src={heroImg} alt="Winter Arcade hero" />
 
-      <div className="homeCoverPanel">
+      {/* ✅ Arcade panel: separate class so it won’t affect Home */}
+      <div className="homeCoverPanel topLeft arcadePanel">
         <BackButton to="/" label="← Back to Home" />
 
         <h2 className="heroTitle">🎮 Arcade</h2>
         <p className="heroSubtitle">Choose a game:</p>
 
         <div className="list">
-          {/* Ice Slalom */}
-
           {/* Snowball Frenzy */}
           <Link className="gameRow" to="/arcade/snowball">
             <span className="gameEmoji">❄️</span>

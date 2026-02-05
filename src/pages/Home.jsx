@@ -12,9 +12,20 @@ export default function Home() {
       {/* foreground NO-CROP */}
       <img className="heroImg" src={heroImg} alt="Winter Olympic Games hero" />
 
-      <div className="homeCoverPanel">
+      {/* PANEL TOP-LEFT */}
+      <div className="homeCoverPanel topLeft">
         <h1 className="heroTitle">WINTER OLYMPIC GAMES</h1>
-        <p className="heroSubtitle">Skill-based winter mini-game for holders.</p>
+
+        <p className="heroSubtitle">
+          Skill-based winter mini-game for holders.
+        </p>
+
+        <p className="heroSubtitle">
+          Challenge live! Climb the leaderboard! 🏆
+        </p>
+        <p className="heroSubtitle">
+          The winner gets a 500,000 token prize 💰
+        </p>
 
         <div className="heroCtaRow">
           <Link className="btn ctaStrong" to="/arcade">
