@@ -2,8 +2,6 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
-  getAccount,
-  getMint,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -21,6 +19,11 @@ function getEnvThreshold() {
   return Number.isFinite(n) ? n : 0;
 }
 
+function getEnvGateEnabled() {
+  const v = String(import.meta.env.VITE_GATE_ENABLED ?? "true").toLowerCase().trim();
+  return !(v === "0" || v === "false" || v === "off" || v === "no");
+}
+
 // Cache a single Connection (faster + avoids re-creating per request)
 let _connection = null;
 function getConnection() {
@@ -28,15 +31,20 @@ function getConnection() {
   return _connection;
 }
 
-// "enabled" should mean: mint exists AND is a valid PublicKey AND threshold > 0
+// "enabled" should mean: gateEnabled=true AND mint valid AND threshold > 0
 export function getGateConfig() {
   const mintStr = getEnvMint();
   const threshold = getEnvThreshold();
+  const gateEnabled = getEnvGateEnabled();
 
+  if (!gateEnabled) return { enabled: false, rpcUrl: RPC_URL, mint: "", threshold };
+
+  // DEV MODE if mint empty or threshold invalid
   if (!mintStr || threshold <= 0) {
     return { enabled: false, rpcUrl: RPC_URL, mint: "", threshold };
   }
 
+  // If mint is not base58-valid, do NOT enable gating (avoid blocking the site)
   try {
     // eslint-disable-next-line no-new
     new PublicKey(mintStr);
@@ -49,10 +57,10 @@ export function getGateConfig() {
 
 /**
  * Returns:
- *  { ok:true, allowed:boolean, balanceUi:number, threshold:number, program?:string }
+ *  { ok:true, allowed:boolean, balanceUi:number, threshold:number, program:string }
  * or { ok:false, error:string }
  *
- * Supports BOTH Token-2022 and classic SPL tokens.
+ * Tries TOKEN_2022 first (common for pump.fun), then classic SPL.
  */
 export async function checkHolderAccess(walletBase58) {
   try {
@@ -60,7 +68,7 @@ export async function checkHolderAccess(walletBase58) {
 
     // DEV MODE: allow access (site usable before launch)
     if (!enabled) {
-      return { ok: true, allowed: true, balanceUi: 0, threshold };
+      return { ok: true, allowed: true, balanceUi: 0, threshold, program: "DEV" };
     }
 
     if (!walletBase58) return { ok: false, error: "missing wallet" };
@@ -77,45 +85,50 @@ export async function checkHolderAccess(walletBase58) {
     const connection = getConnection();
 
     const programsToTry = [
-      { label: "TOKEN_2022", programId: TOKEN_2022_PROGRAM_ID },
-      { label: "TOKEN_CLASSIC", programId: TOKEN_PROGRAM_ID },
+      { label: "TOKEN_2022", tokenProgramId: TOKEN_2022_PROGRAM_ID },
+      { label: "TOKEN_CLASSIC", tokenProgramId: TOKEN_PROGRAM_ID },
     ];
 
     for (const p of programsToTry) {
       try {
-        // ATA depends on token programId
         const ata = await getAssociatedTokenAddress(
           mintPk,
           owner,
           false,
-          p.programId,
+          p.tokenProgramId,
           ASSOCIATED_TOKEN_PROGRAM_ID
         );
 
-        // Fetch mint decimals using the same program
-        const mintInfo = await getMint(connection, mintPk, undefined, p.programId);
-        const decimals = mintInfo.decimals;
+        // Se ATA non esiste -> getTokenAccountBalance lancia -> passiamo al prossimo program
+        const bal = await connection.getTokenAccountBalance(ata);
 
-        // Fetch token account using the same program
-        const tokenAcc = await getAccount(connection, ata, undefined, p.programId);
+        const amountStr = bal?.value?.amount ?? "0"; // raw integer as string
+        const decimals = bal?.value?.decimals ?? 0;
 
-        const rawAmount = tokenAcc.amount; // bigint
-        const uiAmount = Number(rawAmount) / Math.pow(10, decimals);
+        const amountRaw = BigInt(amountStr);
+        const denom = 10n ** BigInt(decimals);
+
+        const balanceUi = Number(amountRaw) / Number(denom);
 
         return {
           ok: true,
-          allowed: uiAmount >= threshold,
-          balanceUi: uiAmount,
+          allowed: balanceUi >= threshold,
+          balanceUi,
           threshold,
           program: p.label,
         };
       } catch (e) {
-        // try next program
+        // prova prossimo programId
       }
     }
 
-    // If no token account was found in either program
-    return { ok: true, allowed: false, balanceUi: 0, threshold, program: "NONE" };
+    return {
+      ok: true,
+      allowed: false,
+      balanceUi: 0,
+      threshold,
+      program: "NONE",
+    };
   } catch (e) {
     return { ok: false, error: e?.message || "gating error" };
   }
