@@ -274,4 +274,52 @@ body > .wallet-adapter-modal-wrapper,
 
   width: 336px;           /* più stretto */
 }
+/* ===== Mobile layout fix (prevent overlaps) ===== */
+@media (max-width: 640px) {
+  .homeCover {
+    min-height: 100svh;
+    padding-top: 56px; /* spazio topbar */
+    padding-bottom: 16px;
+  }
+
+  .heroImg {
+    width: min(94vw, 520px);
+    margin: 10px auto 0; /* meno spazio sopra */
+  }
+
+  /* Panel: da absolute -> normale flow */
+  .homeCoverPanel {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+
+    margin: 12px auto 0 !important;
+    width: min(94vw, 520px) !important;
+
+    padding: 12px 12px !important;
+    border-radius: 14px;
+  }
+
+  /* Se usi la variante topLeft, annullala su mobile */
+  .homeCoverPanel.topLeft {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+  }
+
+  .heroCtaRow {
+    gap: 10px;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .heroHintStrong {
+    width: 100%;
+    text-align: center;
+  }
+}
 
